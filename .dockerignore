@@ -1,0 +1,13 @@
+.git
+.github
+**/.git
+**/node_modules
+**/target
+**/.next
+**/dist
+**/coverage
+**/*.log
+
+# Foundry/build artifacts are generated inside the image when needed.
+contracts/zksync-lite-migration-claims/cache
+contracts/zksync-lite-migration-claims/out

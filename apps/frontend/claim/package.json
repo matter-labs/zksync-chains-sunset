@@ -1,0 +1,31 @@
+{
+  "name": "zksync-lite-sunset-frontend-claim",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "sh -c 'astro dev --host \"${CLAIM_FRONTEND_HOST:-0.0.0.0}\" --port \"${CLAIM_FRONTEND_PORT:-4321}\" --strictPort'",
+    "build": "astro build",
+    "preview": "sh -c 'astro preview --host \"${CLAIM_FRONTEND_HOST:-0.0.0.0}\" --port \"${CLAIM_FRONTEND_PORT:-4321}\" --strictPort'",
+    "typecheck": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/react": "^4.0.0",
+    "@tanstack/react-query": "^5.95.2",
+    "astro": "^5.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "viem": "^2.0.0",
+    "wagmi": "^3.6.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.0",
+    "@astrojs/tailwind": "^6.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.0.0",
+    "postcss": "^8.0.0",
+    "tailwindcss": "^3.0.0",
+    "typescript": "^5.0.0"
+  }
+}

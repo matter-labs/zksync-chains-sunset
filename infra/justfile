@@ -1,0 +1,108 @@
+# Infra tasks
+
+set export
+
+REPO_ROOT := `git rev-parse --show-toplevel`
+COMPOSE_FILE := env_var_or_default('COMPOSE_FILE', `printf '%s/infra/compose.yml' "$(git rev-parse --show-toplevel)"`)
+LOCAL_DEV_HEALTH_URL := env_var_or_default('LOCAL_DEV_HEALTH_URL', 'http://127.0.0.1:3000/healthz')
+INFRA_ENV_FILE := env_var_or_default('INFRA_ENV_FILE', `printf '%s/infra/.env.local' "$(git rev-parse --show-toplevel)"`)
+
+list:
+  @just --list
+
+compose-build:
+  @docker compose -f {{COMPOSE_FILE}} build
+
+compose-up:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [[ -f "{{INFRA_ENV_FILE}}" ]]; then
+    set -a
+    source "{{INFRA_ENV_FILE}}"
+    set +a
+  fi
+  docker compose -f {{COMPOSE_FILE}} up -d --build --remove-orphans
+
+compose-down:
+  @docker compose -f {{COMPOSE_FILE}} down --remove-orphans
+
+compose-logs:
+  @docker compose -f {{COMPOSE_FILE}} logs -f --tail=200
+
+compose-debug contracts_env_file="/tmp/zksync-lite-sunset-compose-contracts.env" rpc_url="http://127.0.0.1:5010":
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  if [[ ! -f "{{contracts_env_file}}" ]]; then
+    echo "missing contracts env file: {{contracts_env_file}}" >&2
+    echo "run just dev-seeded-address <address> first so the seeded bootstrap writes it" >&2
+    exit 1
+  fi
+
+  set -a
+  source "{{contracts_env_file}}"
+  set +a
+
+  claim_contract="${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__CLAIM_CONTRACT_ADDRESS}"
+  migration_contract="${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIGRATION_CONTRACT_ADDRESS}"
+
+  echo "contracts_env_file={{contracts_env_file}}"
+  echo "rpc_url={{rpc_url}}"
+  echo "migration_contract=${migration_contract}"
+  echo "migration_l1_claim_distributor=${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIGRATION_L1_CLAIM_DISTRIBUTOR_ADDRESS}"
+  echo "claim_contract=${claim_contract}"
+  echo "claim_eth_balance=$(cast balance --rpc-url "{{rpc_url}}" "${claim_contract}")"
+  echo "claim_usdc_balance=$(cast call --rpc-url "{{rpc_url}}" "${ZKSYNC_LITE_SUNSET__DEV_SEED__USDC_ADDRESS}" 'balanceOf(address)(uint256)' "${claim_contract}")"
+  echo "claim_dai_balance=$(cast call --rpc-url "{{rpc_url}}" "${ZKSYNC_LITE_SUNSET__DEV_SEED__DAI_ADDRESS}" 'balanceOf(address)(uint256)' "${claim_contract}")"
+  echo "claim_usdt_balance=$(cast call --rpc-url "{{rpc_url}}" "${ZKSYNC_LITE_SUNSET__DEV_SEED__USDT_ADDRESS}" 'balanceOf(address)(uint256)' "${claim_contract}")"
+
+compose-health:
+  @PUBLIC_HEALTH_URL={{LOCAL_DEV_HEALTH_URL}} bash ../scripts/dev/check-compose-backend-health.sh
+
+compose-refresh:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [[ -f "{{INFRA_ENV_FILE}}" ]]; then
+    set -a
+    source "{{INFRA_ENV_FILE}}"
+    set +a
+  fi
+  docker compose -f {{COMPOSE_FILE}} up -d --build --remove-orphans
+
+compose-smoke:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [[ -f "{{INFRA_ENV_FILE}}" ]]; then
+    set -a
+    source "{{INFRA_ENV_FILE}}"
+    set +a
+  fi
+  docker compose -f {{COMPOSE_FILE}} down --volumes --remove-orphans >/dev/null 2>&1 || true
+  docker compose -f {{COMPOSE_FILE}} up -d --build
+  trap 'docker compose -f {{COMPOSE_FILE}} down --volumes --remove-orphans >/dev/null 2>&1 || true' EXIT
+
+  PUBLIC_HEALTH_URL="{{LOCAL_DEV_HEALTH_URL}}" INFRA_ENV_FILE="{{INFRA_ENV_FILE}}" COMPOSE_FILE="{{COMPOSE_FILE}}" bash ../scripts/dev/check-compose-backend-health.sh
+
+compose-seeded-smoke address="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" claimant_private_key="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" keep_stack="false" teardown="true":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [[ -f "{{INFRA_ENV_FILE}}" ]]; then
+    set -a
+    source "{{INFRA_ENV_FILE}}"
+    set +a
+  fi
+
+  args=(
+    --address "{{address}}"
+    --private-key "{{claimant_private_key}}"
+    --compose-file "{{COMPOSE_FILE}}"
+    --infra-env-file "{{INFRA_ENV_FILE}}"
+  )
+  if [[ "{{keep_stack}}" == "true" ]]; then
+    args+=(--keep-stack-running)
+  fi
+  if [[ "{{teardown}}" == "true" ]]; then
+    args+=(--teardown-compose)
+  fi
+
+  cargo run --manifest-path "{{REPO_ROOT}}/apps/backend/Cargo.toml" -p zksync-lite-sunset-cli -- compose-seeded-smoke "${args[@]}"

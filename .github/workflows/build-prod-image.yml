@@ -1,0 +1,56 @@
+name: build-prod-image
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git tag to build (e.g. v1.2.3). Defaults to the ref the workflow was dispatched from."
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: build-prod-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-24.04
+    outputs:
+      image_version: ${{ steps.version.outputs.image_version }}
+      git_ref: ${{ steps.version.outputs.git_ref }}
+    steps:
+      - name: Resolve image version from git tag
+        id: version
+        # Modelled on zksync-era's build-docker-from-tag.yml setup job. The
+        # tag must look like v<semver> — non-version refs are rejected.
+        run: |
+          if [[ -n "${{ inputs.ref }}" ]]; then
+            git_ref="${{ inputs.ref }}"
+          else
+            git_ref="${GITHUB_REF}"
+          fi
+          image_version="${git_ref##refs/tags/}"
+          if [[ ! "${image_version}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
+            echo "Rejecting non-version image tag: ${image_version}"
+            echo "Push a git tag like v1.2.3 or dispatch with ref set to such a tag."
+            exit 1
+          fi
+          echo "image_version=${image_version}" >> "${GITHUB_OUTPUT}"
+          echo "git_ref=${git_ref}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs: [setup]
+    uses: ./.github/workflows/build-server-image.yml
+    with:
+      image_version: ${{ needs.setup.outputs.image_version }}
+      additional_tag: prod
+      ref: ${{ needs.setup.outputs.git_ref }}

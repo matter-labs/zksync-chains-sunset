@@ -1,0 +1,95 @@
+# Frontend tasks (run from repo root via `just frontend <task>`)
+set export
+
+list:
+  @just --list
+
+dev:
+  @sh -c 'trap "kill 0" INT TERM EXIT; (cd ../.. && just backend server-dev-fresh) & bun run dev:claim & bun run dev:migrate & wait'
+
+# Start the supported compose-backed seeded stack used by Playwright e2e, but
+# without launching tests.
+dev-e2e:
+  @bash scripts/e2e_webserver_compose.sh
+
+# Start the supported seeded compose stack for a specific address via the Rust
+# CLI. This browser/manual path defaults to an all-unmigrated fixture.
+dev-seeded-address address:
+  @CLAIMANT="{{address}}" bash ../../scripts/dev/run-compose-seeded-stack.sh || test $? -eq 130
+
+# Migrate every currently pending token on the running seeded stack using an
+# Anvil funded account.
+dev-migrate-all-tokens:
+  @bash ../../scripts/dev/migrate-all-tokens.sh
+
+# Frontend-only dev server (no backend process).
+dev-claim:
+  @bun run dev:claim
+
+dev-migrate:
+  @bun run dev:migrate
+
+dev-frontend:
+  @sh -c 'trap "kill 0" INT TERM EXIT; bun run dev:claim & bun run dev:migrate & wait'
+
+build:
+  @bun run build
+
+build-claim:
+  @bun run build:claim
+
+build-migrate:
+  @bun run build:migrate
+
+preview:
+  @sh -c 'trap "kill 0" INT TERM EXIT; bun run preview:claim & bun run preview:migrate & wait'
+
+preview-claim:
+  @bun run preview:claim
+
+preview-migrate:
+  @bun run preview:migrate
+
+typecheck:
+  @bun run typecheck
+
+typecheck-claim:
+  @bun run typecheck:claim
+
+typecheck-migrate:
+  @bun run typecheck:migrate
+
+test-unit:
+  @env -u NO_COLOR bun run test:unit
+
+test-unit-claim:
+  @env -u NO_COLOR bun run test:unit:claim
+
+test-unit-migrate:
+  @env -u NO_COLOR bun run test:unit:migrate
+
+test-e2e:
+  @env -u NO_COLOR bun run test:e2e:compose
+
+# Explicit alias for the supported compose-backed browser/runtime flow.
+test-e2e-compose:
+  @env -u NO_COLOR bun run test:e2e:compose
+
+# Lightweight frontend-only browser tests with mocked wallet/API traffic.
+test-e2e-ui:
+  @env -u NO_COLOR bun run test:e2e
+
+test-e2e-claim:
+  @env -u NO_COLOR bun run test:e2e:claim
+
+test-e2e-migrate:
+  @env -u NO_COLOR bun run test:e2e:migrate
+
+test-e2e-seeded-address address:
+  @env -u NO_COLOR CLAIMANT="{{address}}" bun run test:e2e:compose
+
+fmt:
+  @bun run fmt
+
+fmt-check:
+  @bun run fmt-check

@@ -1,0 +1,14 @@
+{
+  "../zksync-lite": {
+    "rev": "2a1393912f48f8b5464e9a53462ed37d7ff729a4"
+  },
+  "lib/openzeppelin-contracts": {
+    "rev": "dc44c9f1a4c3b10af99492eed84f83ed244203f6"
+  },
+  "lib/openzeppelin-contracts-upgradeable": {
+    "rev": "2d081f24cac1a867f6f73d512f2022e1fa987854"
+  },
+  "lib/zk-governance": {
+    "rev": "b1d1bdce1def3c036c06e449787a3763bf47e766"
+  }
+}

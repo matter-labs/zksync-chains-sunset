@@ -1,0 +1,1 @@
+CREATE DATABASE zksync_lite_sunset_test;
