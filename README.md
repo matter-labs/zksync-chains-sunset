@@ -89,3 +89,9 @@ waits for `mined_success`.
 For arbitrary seeded addresses that are not backed by a wallet you can actually use in the browser, the stack can still fully prepare migration and claim payloads, and L1 migration can be exercised locally via Anvil impersonation. Final claim submission still requires the claimant's real wallet because the browser-driven flow is what authorizes the request.
 
 If you explicitly want a prep-only seeded session for an unsignable address, set `FIXTURE_MODE=all-unmigrated`.
+
+## License and Disclaimer
+
+Licensed under the [MIT License](LICENSE).
+
+This software is provided "as is", without warranty of any kind. Matter Labs has no obligation to maintain, support or update it, or to respond to issues or pull requests.
