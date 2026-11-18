@@ -1,0 +1,125 @@
+name: frontend
+
+on:
+  push:
+    paths:
+      - "apps/frontend/**"
+      - "apps/backend/**"
+      - "contracts/zksync-lite-migration-claims/**"
+      - "infra/**"
+      - "scripts/dev/deploy-split-dev-contracts.sh"
+      - "scripts/dev/run-compose-seeded-stack.sh"
+      - "justfile"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    paths:
+      - "apps/frontend/**"
+      - "apps/backend/**"
+      - "contracts/zksync-lite-migration-claims/**"
+      - "infra/**"
+      - "scripts/dev/deploy-split-dev-contracts.sh"
+      - "scripts/dev/run-compose-seeded-stack.sh"
+      - "justfile"
+      - ".github/workflows/frontend.yml"
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+defaults:
+  run:
+    working-directory: apps/frontend
+
+jobs:
+  frontend:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.5"
+          cache: true
+          cache-dependency-path: apps/frontend/bun.lock
+
+      - name: Install Just
+        uses: extractions/setup-just@v2
+
+      - name: Cache Playwright Browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/frontend/bun.lock') }}
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Format Check
+        run: bun run fmt-check
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.0
+
+      - name: Install sqlx-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: sqlx-cli@0.8.6
+
+      - name: Install Foundry
+        id: install_foundry
+        continue-on-error: true
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.1
+
+      - name: Retry Install Foundry
+        if: steps.install_foundry.outcome == 'failure'
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.1
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            apps/backend -> target
+
+      - name: Build contract ABI artifacts
+        working-directory: .
+        run: just contracts claims-build
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Frontend Mocked UI E2E
+        run: bun run test:e2e
+
+      - name: Prebuild Compose Images
+        working-directory: .
+        run: docker compose -f infra/compose.yml build zksync-lite-sunset-server
+
+      - name: Compose Seeded E2E
+        env:
+          COMPOSE_BUILD_SERVER: "false"
+        run: bun run test:e2e:compose

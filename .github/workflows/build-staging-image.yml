@@ -1,0 +1,28 @@
+name: build-staging-image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/backend/**"
+      - "contracts/zksync-lite-migration-claims/**"
+      - ".github/workflows/build-staging-image.yml"
+      - ".github/workflows/build-prod-image.yml"
+      - ".github/workflows/build-server-image.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: build-staging-image
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-server-image.yml
+    with:
+      image_version: ${{ github.sha }}
+      additional_tag: staging

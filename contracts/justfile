@@ -1,0 +1,27 @@
+# Contracts tasks (run from repo root via `just contracts <task>`)
+
+list:
+  @just --list
+
+# Initialize git submodules.
+setup:
+  @git submodule update --init --recursive
+
+# --- zksync-lite-migration-claims (Foundry) ---
+
+claims-install:
+  @git submodule update --init zksync-lite-migration-claims/lib/openzeppelin-contracts
+  @git submodule update --init zksync-lite-migration-claims/lib/openzeppelin-contracts-upgradeable
+  @git submodule update --init zksync-lite-migration-claims/lib/zk-governance
+
+claims-build:
+  @cd zksync-lite-migration-claims && forge build
+
+claims-test:
+  @cd zksync-lite-migration-claims && forge test
+
+claims-fmt:
+  @cd zksync-lite-migration-claims && forge fmt
+
+claims-deploy-dev:
+  @bash ../scripts/dev/deploy-fork-contracts.sh

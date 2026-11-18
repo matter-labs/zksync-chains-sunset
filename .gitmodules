@@ -1,0 +1,9 @@
+[submodule "contracts/zksync-lite-migration-claims/lib/zk-governance"]
+	path = contracts/zksync-lite-migration-claims/lib/zk-governance
+	url = https://github.com/zksync-association/zk-governance.git
+[submodule "contracts/zksync-lite-migration-claims/lib/openzeppelin-contracts"]
+	path = contracts/zksync-lite-migration-claims/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts.git
+[submodule "contracts/zksync-lite-migration-claims/lib/openzeppelin-contracts-upgradeable"]
+	path = contracts/zksync-lite-migration-claims/lib/openzeppelin-contracts-upgradeable
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable.git

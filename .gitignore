@@ -1,0 +1,19 @@
+target/
+**/target/
+
+.DS_Store
+*.log
+
+.env
+.env.*
+!infra/.env.example
+
+# Foundry
+**/out/
+**/cache/
+**/broadcast/
+
+# VSCode
+.vscode/
+apps/backend/fixtures/real_data/
+data/newdata

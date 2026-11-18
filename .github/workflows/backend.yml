@@ -1,0 +1,190 @@
+name: backend
+
+on:
+  push:
+    paths:
+      - 'apps/backend/**'
+      - 'contracts/zksync-lite-migration-claims/**'
+      - 'scripts/dev/deploy-split-dev-contracts.sh'
+      - 'scripts/dev/run-compose-seeded-stack.sh'
+      - 'infra/**'
+      - 'justfile'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    paths:
+      - 'apps/backend/**'
+      - 'contracts/zksync-lite-migration-claims/**'
+      - 'scripts/dev/deploy-split-dev-contracts.sh'
+      - 'scripts/dev/run-compose-seeded-stack.sh'
+      - 'infra/**'
+      - 'justfile'
+      - '.github/workflows/backend.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zksync_lite_sunset_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d zksync_lite_sunset_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      ZKSYNC_LITE_SUNSET_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/zksync_lite_sunset_test
+      ZKSYNC_LITE_SUNSET__CORE__DATABASE__URL: postgres://postgres:postgres@127.0.0.1:5432/zksync_lite_sunset_test
+      ZKSYNC_LITE_SUNSET__CORE__DATABASE__AUTO_MIGRATE: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.0
+          components: rustfmt, clippy
+
+      - name: Install Just
+        uses: extractions/setup-just@v2
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Install Foundry
+        id: install_foundry_backend
+        continue-on-error: true
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.1
+
+      - name: Retry Install Foundry
+        if: steps.install_foundry_backend.outcome == 'failure'
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.1
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            apps/backend -> target
+
+      - name: Build contract ABI artifacts
+        run: just contracts claims-build
+
+      - name: Wait for Postgres
+        run: |
+          for _ in $(seq 1 30); do
+            if pg_isready -h 127.0.0.1 -p 5432 -U postgres -d zksync_lite_sunset_test; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Format
+        run: just -f apps/backend/justfile fmt-check
+
+      - name: Clippy
+        run: just -f apps/backend/justfile clippy
+
+      - name: Test
+        run: just -f apps/backend/justfile test
+
+  backend-onchain:
+    runs-on: [matterlabs-ci-runner-high-performance]
+    needs: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.0
+
+      - name: Install sqlx-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: sqlx-cli@0.8.6
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.5"
+          cache: true
+          cache-dependency-path: apps/frontend/bun.lock
+
+      - name: Install Just
+        uses: extractions/setup-just@v2
+
+      - name: Install Foundry
+        id: install_foundry_onchain
+        continue-on-error: true
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.1
+
+      - name: Retry Install Foundry
+        if: steps.install_foundry_onchain.outcome == 'failure'
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.1
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            apps/backend -> target
+
+      - name: Build contract ABI artifacts
+        run: just contracts claims-build
+
+      - name: Install Frontend Dependencies
+        working-directory: apps/frontend
+        run: bun install --frozen-lockfile
+
+      - name: Prebuild Compose Images
+        run: docker compose -f infra/compose.yml build zksync-lite-sunset-server
+
+      - name: Run supported seeded smoke
+        env:
+          COMPOSE_BUILD_SERVER: "false"
+        run: |
+          cargo run --manifest-path apps/backend/Cargo.toml -p zksync-lite-sunset-cli -- \
+            compose-seeded-smoke
+
+      - name: Dump diagnostics on failure
+        if: failure()
+        run: |
+          echo "===== smoke stack log ====="
+          cat /tmp/zksync-lite-sunset-compose-seeded-smoke-*.log || true
+          echo "===== backend container logs ====="
+          docker compose -f infra/compose.yml logs --no-color zksync-lite-sunset-server || true
+          echo "===== anvil container logs (tail) ====="
+          docker compose -f infra/compose.yml logs --no-color --tail 200 anvil || true
+
+      - name: Teardown compose
+        if: always()
+        run: |
+          docker compose -f infra/compose.yml down --volumes --remove-orphans || true

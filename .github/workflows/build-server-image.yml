@@ -1,0 +1,86 @@
+name: build-server-image
+
+on:
+  workflow_call:
+    inputs:
+      image_version:
+        description: "Immutable image tag (commit SHA for staging, git tag for prod)."
+        type: string
+        required: true
+      additional_tag:
+        description: "Optional mutable tag to apply alongside the version tag (e.g. staging, prod)."
+        type: string
+        required: false
+        default: ""
+      ref:
+        description: "Git ref to build. Defaults to the ref of the calling workflow."
+        type: string
+        required: false
+        default: ""
+      push:
+        description: "Whether to push the image after build."
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: [matterlabs-ci-runner-high-performance]
+    env:
+      IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/zksync-lite-sunset-server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          tags="${IMAGE_REPOSITORY}:${{ inputs.image_version }}"
+          if [[ -n "${{ inputs.additional_tag }}" ]]; then
+            tags="${tags}"$'\n'"${IMAGE_REPOSITORY}:${{ inputs.additional_tag }}"
+          fi
+          {
+            echo "tags<<EOF"
+            echo "${tags}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GHCR
+        if: inputs.push
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Build and push API image
+        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
+        with:
+          context: .
+          file: apps/backend/crates/zksync-lite-sunset-server/Dockerfile
+          platforms: linux/amd64
+          push: ${{ inputs.push }}
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summarize pushed tags
+        if: inputs.push
+        run: |
+          {
+            echo "### Pushed image"
+            echo ""
+            echo "\`\`\`"
+            echo "${{ steps.tags.outputs.tags }}"
+            echo "\`\`\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

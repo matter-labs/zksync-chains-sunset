@@ -1,0 +1,41 @@
+.root {
+  display: inline-flex;
+  height: 56px;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  border-radius: 16px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  font-size: 1rem;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.root:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.primary {
+  min-width: 186px;
+  background: var(--primary);
+  color: var(--white);
+}
+
+.secondary {
+  background: color-mix(in srgb, var(--panel-bg), white 60%);
+  color: #0a1a66;
+  border-color: var(--stroke);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.block {
+  width: 100%;
+}

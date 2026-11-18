@@ -1,0 +1,45 @@
+name: backend-infra-smoke
+
+on:
+  push:
+    paths:
+      - 'infra/**'
+      - 'apps/backend/**'
+      - '.github/workflows/backend-infra-smoke.yml'
+  pull_request:
+    paths:
+      - 'infra/**'
+      - 'apps/backend/**'
+      - '.github/workflows/backend-infra-smoke.yml'
+
+jobs:
+  backend-infra-smoke:
+    runs-on: [matterlabs-ci-runner-high-performance]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Compose Up
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 3); do
+            if docker compose -f infra/compose.yml up -d --build; then
+              exit 0
+            fi
+            echo "compose up failed (attempt ${attempt}/3); retrying after cleanup"
+            docker compose -f infra/compose.yml down --remove-orphans || true
+            sleep 5
+          done
+          echo "compose up failed after 3 attempts"
+          exit 1
+
+      - name: Healthcheck
+        run: |
+          bash scripts/dev/check-compose-backend-health.sh
+
+      - name: Compose Down
+        if: always()
+        run: |
+          docker compose -f infra/compose.yml down --remove-orphans

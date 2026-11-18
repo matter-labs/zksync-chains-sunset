@@ -1,0 +1,29 @@
+[package]
+name = "zksync-lite-sunset-snapshot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+alloy.workspace = true
+csv.workspace = true
+eyre.workspace = true
+merkle-tree-generator.workspace = true
+postgres.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sha3.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+sqlx.workspace = true
+
+[[bench]]
+name = "snapshot_compile"
+harness = false

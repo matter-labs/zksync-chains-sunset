@@ -1,0 +1,90 @@
+services:
+  zksync-lite-sunset-server:
+    image: zksync-lite-sunset-server:dev
+    build:
+      context: ..
+      dockerfile: apps/backend/crates/zksync-lite-sunset-server/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      anvil:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      ZKSYNC_LITE_SUNSET__SERVER__HOST: "0.0.0.0"
+      ZKSYNC_LITE_SUNSET__SERVER__PORT: "3000"
+      ZKSYNC_LITE_SUNSET__CORS__ENABLED: "true"
+      ZKSYNC_LITE_SUNSET__CORS__ALLOWED_ORIGINS: "${ZKSYNC_LITE_SUNSET__CORS__ALLOWED_ORIGINS:-http://localhost:4321,http://127.0.0.1:4321,http://localhost:4322,http://127.0.0.1:4322,http://localhost:4421,http://127.0.0.1:4421,http://localhost:4422,http://127.0.0.1:4422}"
+      ZKSYNC_LITE_SUNSET__CORE__DATABASE__URL: "postgres://postgres:postgres@postgres:5432/zksync_lite_sunset"
+      ZKSYNC_LITE_SUNSET__CORE__DATABASE__AUTO_MIGRATE: "true"
+      ZKSYNC_LITE_SUNSET__CORE__CLAIMS__FRONTEND_MODE: "${ZKSYNC_LITE_SUNSET__CORE__CLAIMS__FRONTEND_MODE:-sponsored}"
+      ZKSYNC_LITE_SUNSET__CORE__AUTH__MIGRATE_CHAIN_ID: "${ZKSYNC_LITE_SUNSET__CORE__AUTH__MIGRATE_CHAIN_ID:-31338}"
+      ZKSYNC_LITE_SUNSET__CORE__AUTH__CLAIM_CHAIN_ID: "${ZKSYNC_LITE_SUNSET__CORE__AUTH__CLAIM_CHAIN_ID:-31338}"
+      ZKSYNC_LITE_SUNSET__CORE__EXECUTION__RPC_URL: "${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__RPC_URL:-http://anvil:5010}"
+      ZKSYNC_LITE_SUNSET__CORE__EXECUTION__FROM_ADDRESS: "${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__FROM_ADDRESS:-0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266}"
+      ZKSYNC_LITE_SUNSET__CORE__EXECUTION__SPONSOR_PRIVATE_KEY: "${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__SPONSOR_PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
+      ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIGRATION_CONTRACT_ADDRESS: "${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIGRATION_CONTRACT_ADDRESS:-0x0000000000000000000000000000000000000000}"
+      ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIGRATION_L1_CLAIM_DISTRIBUTOR_ADDRESS: "${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIGRATION_L1_CLAIM_DISTRIBUTOR_ADDRESS:-0x0000000000000000000000000000000000000000}"
+      ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIGRATION_CLAIM_ROOT: "${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIGRATION_CLAIM_ROOT:-0x0000000000000000000000000000000000000000000000000000000000000000}"
+      ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIGRATION_TOKEN_MIGRATION_ROOT: "${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIGRATION_TOKEN_MIGRATION_ROOT:-0x0000000000000000000000000000000000000000000000000000000000000000}"
+      ZKSYNC_LITE_SUNSET__CORE__EXECUTION__CLAIM_CONTRACT_ADDRESS: "${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__CLAIM_CONTRACT_ADDRESS:-0x0000000000000000000000000000000000000000}"
+      ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MULTICALL3_CONTRACT_ADDRESS: "${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MULTICALL3_CONTRACT_ADDRESS:-0xcA11bde05977b3631167028862bE2a173976CA11}"
+      # Local anvil only mines on tx, so production's 4-confirmation default
+      # would stall finalization here. Drop to 1 for the local seeded stack;
+      # staging/prod inherit the production default from config.rs.
+      ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIN_CONFIRMATIONS: "${ZKSYNC_LITE_SUNSET__CORE__EXECUTION__MIN_CONFIRMATIONS:-1}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3001/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: "zksync_lite_sunset"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d zksync_lite_sunset"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+      - zksync-lite-sunset-postgres:/var/lib/postgresql/data
+
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:v1.5.1
+    volumes:
+      - l1state:/home/foundry/l1state
+    entrypoint: ''
+    user: 'root'
+    environment:
+      ETH_SEPOLIA_RPC_URL: "${ETH_SEPOLIA_RPC_URL:-}"
+      DEV_CHAIN_ID: "${DEV_CHAIN_ID:-31338}"
+    ports:
+      - '5010:5010'
+    healthcheck:
+      test: ['CMD-SHELL', 'cast chain-id -r http://localhost:5010']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: |
+      bash -c "
+      anvil --version
+      RPC_URL=\"$$ETH_SEPOLIA_RPC_URL\"
+      if [ -n \"$$RPC_URL\" ]; then
+        anvil --port 5010 --host 0.0.0.0 --chain-id \"$$DEV_CHAIN_ID\" --fork-url \"$$RPC_URL\" --auto-impersonate --transaction-block-keeper 10000 --preserve-historical-states
+      else
+        anvil --port 5010 --host 0.0.0.0 --chain-id \"$$DEV_CHAIN_ID\" --transaction-block-keeper 10000 --preserve-historical-states
+      fi
+      "
+
+volumes:
+  zksync-lite-sunset-postgres:
+  l1state:
